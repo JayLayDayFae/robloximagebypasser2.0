@@ -1,87 +1,116 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>RBX Asset Gen</title>
+    <title>Roblox Decal Bypass</title>
+    <style>
+        body { font-family: serif; margin: 10px; }
+        .preview-card { border: 1px solid black; margin-bottom: 20px; padding: 5px; display: inline-block; vertical-align: top; }
+        .output-item { border: 1px solid black; padding: 5px; margin-top: 5px; display: flex; align-items: center; gap: 10px; }
+        canvas { display: none; }
+    </style>
 </head>
 <body>
 
-    <div>
-        <label>Image</label>
-        <input type="file" id="imgInp" accept="image/*">
-    </div>
+    <h1>Roblox Decal Bypass</h1>
 
     <div>
-        <label>Size: <span id="sizeVal">12</span> Studs</label>
-        <input type="range" id="sizeSlider" min="1" max="50" value="12" oninput="document.getElementById('sizeVal').innerText=this.value">
+        Files: <input type="file" id="imageInput" multiple accept="image/*">
     </div>
 
-    <div>
-        <label>Res: <span id="resVal">150</span>px</label>
-        <input type="range" id="resSlider" min="10" max="300" value="150" oninput="document.getElementById('resVal').innerText=this.value">
-    </div>
+    <hr>
 
-    <div>
-        <input type="checkbox" id="createPart" checked> 
-        <label for="createPart">Add Part</label>
-    </div>
+    <div id="preview-container"></div>
+    
+    <button id="convertBtn" style="display:none;">CONVERT ALL</button>
 
-    <button onclick="process()">Download RBXM</button>
+    <hr>
 
-    <canvas id="c" style="display:none;"></canvas>
+    <div id="output-container"></div>
+
+    <canvas id="procCanvas"></canvas>
 
     <script>
-        function process() {
-            const inp = document.getElementById('imgInp');
-            const sizeScale = parseFloat(document.getElementById('sizeSlider').value);
-            const res = parseInt(document.getElementById('resSlider').value);
-            const shouldPart = document.getElementById('createPart').checked;
-            const canvas = document.getElementById('c');
-            const ctx = canvas.getContext('2d');
+        const imageInput = document.getElementById('imageInput');
+        const previewContainer = document.getElementById('preview-container');
+        const convertBtn = document.getElementById('convertBtn');
+        const outputContainer = document.getElementById('output-container');
+        const canvas = document.getElementById('procCanvas');
+        const ctx = canvas.getContext('2d');
 
-            if (!inp.files[0]) return;
+        let imageBatch = [];
 
-            const img = new Image();
-            img.onload = function() {
-                const ratio = img.height / img.width;
-                const pw = sizeScale;
-                const ph = sizeScale * ratio;
-                let w = res;
-                let h = Math.floor(res * ratio);
+        imageInput.addEventListener('change', (e) => {
+            previewContainer.innerHTML = '';
+            imageBatch = [];
+            const files = Array.from(e.target.files);
+            if(files.length > 0) convertBtn.style.display = 'block';
 
-                canvas.width = w; canvas.height = h;
-                ctx.drawImage(img, 0, 0, w, h);
-                const data = ctx.getImageData(0, 0, w, h).data;
+            files.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const id = "img_" + index;
+                        const cleanName = file.name.split('.')[0];
+                        imageBatch.push({ id, img, file, originalName: cleanName });
 
-                let xml = `<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">`;
-                if (shouldPart) {
-                    xml += `<Item class="Part" referent="RBX1"><Properties><string name="Name">ImagePart</string><Vector3 name="Size"><X>${pw}</X><Y>${ph}</Y><Z>1</Z></Vector3><bool name="Anchored">true</bool></Properties>`;
-                }
-                xml += `<Item class="SurfaceGui" referent="RBX2"><Properties><string name="Name">ImageGui</string><token name="Face">5</token><Vector2 name="CanvasSize"><X>${w}</X><Y>${h}</Y></Vector2></Properties>`;
+                        const card = document.createElement('div');
+                        card.className = 'preview-card';
+                        card.innerHTML = `
+                            <img src="${event.target.result}" height="80"><br>
+                            Name: <input type="text" id="name_${id}" value="${cleanName}"><br>
+                            Size: <span id="sLabel_${id}">12</span> Studs <input type="range" id="scale_${id}" min="1" max="100" value="12" oninput="document.getElementById('sLabel_${id}').innerText=this.value"><br>
+                            Res: <span id="rLabel_${id}">150</span>px <input type="range" id="res_${id}" min="1" max="300" value="150" oninput="document.getElementById('rLabel_${id}').innerText=this.value"><br>
+                            <input type="checkbox" id="part_${id}" checked> Add Part
+                        `;
+                        previewContainer.appendChild(card);
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        });
 
-                for (let y = 0; y < h; y++) {
-                    for (let x = 0; x < w; x++) {
-                        const i = (y * w + x) * 4;
-                        if (data[i+3] > 125) {
-                            xml += `<Item class="Frame"><Properties><string name="Name">p</string><Color3 name="BackgroundColor3"><R>${data[i]/255}</R><G>${data[i+1]/255}</G><B>${data[i+2]/255}</B></Color3><int name="BorderSizePixel">0</int><UDim2 name="Position"><XS>0</XS><XO>${x}</XO><YS>0</YS><YO>${y}</YO></UDim2><UDim2 name="Size"><XS>0</XS><XO>1</XO><YS>0</YS><YO>1</YO></UDim2></Properties></Item>`;
+        convertBtn.addEventListener('click', () => {
+            outputContainer.innerHTML = '<b>Outputs:</b>';
+
+            imageBatch.forEach(item => {
+                const finalName = document.getElementById(`name_${item.id}`).value;
+                const procRes = parseInt(document.getElementById(`res_${item.id}`).value);
+                const gameScale = document.getElementById(`scale_${item.id}`).value;
+                const addPart = document.getElementById(`part_${item.id}`).checked;
+
+                const ratio = item.img.height / item.img.width;
+                canvas.width = procRes;
+                canvas.height = procRes * ratio;
+
+                ctx.clearRect(0,0,canvas.width, canvas.height);
+                ctx.drawImage(item.img, 0, 0, canvas.width, canvas.height);
+                const imgData = ctx.getImageData(0,0, canvas.width, canvas.height).data;
+                
+                let lua = `local Data = {\n  Name = "${finalName}",\n  Scale = ${gameScale},\n  AddPart = ${addPart},\n  Pixels = {\n`;
+                for (let y = 0; y < canvas.height; y++) {
+                    for (let x = 0; x < canvas.width; x++) {
+                        const i = (y * canvas.width + x) * 4;
+                        // Only include pixels that aren't fully transparent
+                        if (imgData[i+3] > 0) {
+                            lua += `    {Vector2.new(${x},${y}), Color3.fromRGB(${imgData[i]},${imgData[i+1]},${imgData[i+2]})},\n`;
                         }
                     }
                 }
-                xml += `</Item>`;
-                if (shouldPart) xml += `</Item>`;
-                xml += `</roblox>`;
+                lua += "  }\n}\nreturn Data";
 
-                const blob = new Blob([xml], {type: "text/xml"});
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "asset.rbxm";
-                a.click();
-            };
-            const reader = new FileReader();
-            reader.onload = (e) => img.src = e.target.result;
-            reader.readAsDataURL(inp.files[0]);
-        }
+                const pill = document.createElement('div');
+                pill.className = 'output-item';
+                pill.innerHTML = `
+                    <img src="${item.img.src}" height="30">
+                    <span>${finalName}.lua</span>
+                    <button onclick="const a=document.createElement('a');a.href='data:text/plain;charset=utf-8,${encodeURIComponent(lua)}';a.download='${finalName}.lua';a.click();">Download</button>
+                `;
+                outputContainer.appendChild(pill);
+            });
+        });
     </script>
+
 </body>
 </html>
