@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RBX Asset Gen</title>
+</head>
+<body>
+
+    <div>
+        <label>Image</label>
+        <input type="file" id="imgInp" accept="image/*">
+    </div>
+
+    <div>
+        <label>Size: <span id="sizeVal">12</span> Studs</label>
+        <input type="range" id="sizeSlider" min="1" max="50" value="12" oninput="document.getElementById('sizeVal').innerText=this.value">
+    </div>
+
+    <div>
+        <label>Res: <span id="resVal">150</span>px</label>
+        <input type="range" id="resSlider" min="10" max="300" value="150" oninput="document.getElementById('resVal').innerText=this.value">
+    </div>
+
+    <div>
+        <input type="checkbox" id="createPart" checked> 
+        <label for="createPart">Add Part</label>
+    </div>
+
+    <button onclick="process()">Download RBXM</button>
+
+    <canvas id="c" style="display:none;"></canvas>
+
+    <script>
+        function process() {
+            const inp = document.getElementById('imgInp');
+            const sizeScale = parseFloat(document.getElementById('sizeSlider').value);
+            const res = parseInt(document.getElementById('resSlider').value);
+            const shouldPart = document.getElementById('createPart').checked;
+            const canvas = document.getElementById('c');
+            const ctx = canvas.getContext('2d');
+
+            if (!inp.files[0]) return;
+
+            const img = new Image();
+            img.onload = function() {
+                const ratio = img.height / img.width;
+                const pw = sizeScale;
+                const ph = sizeScale * ratio;
+                let w = res;
+                let h = Math.floor(res * ratio);
+
+                canvas.width = w; canvas.height = h;
+                ctx.drawImage(img, 0, 0, w, h);
+                const data = ctx.getImageData(0, 0, w, h).data;
+
+                let xml = `<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">`;
+                if (shouldPart) {
+                    xml += `<Item class="Part" referent="RBX1"><Properties><string name="Name">ImagePart</string><Vector3 name="Size"><X>${pw}</X><Y>${ph}</Y><Z>1</Z></Vector3><bool name="Anchored">true</bool></Properties>`;
+                }
+                xml += `<Item class="SurfaceGui" referent="RBX2"><Properties><string name="Name">ImageGui</string><token name="Face">5</token><Vector2 name="CanvasSize"><X>${w}</X><Y>${h}</Y></Vector2></Properties>`;
+
+                for (let y = 0; y < h; y++) {
+                    for (let x = 0; x < w; x++) {
+                        const i = (y * w + x) * 4;
+                        if (data[i+3] > 125) {
+                            xml += `<Item class="Frame"><Properties><string name="Name">p</string><Color3 name="BackgroundColor3"><R>${data[i]/255}</R><G>${data[i+1]/255}</G><B>${data[i+2]/255}</B></Color3><int name="BorderSizePixel">0</int><UDim2 name="Position"><XS>0</XS><XO>${x}</XO><YS>0</YS><YO>${y}</YO></UDim2><UDim2 name="Size"><XS>0</XS><XO>1</XO><YS>0</YS><YO>1</YO></UDim2></Properties></Item>`;
+                        }
+                    }
+                }
+                xml += `</Item>`;
+                if (shouldPart) xml += `</Item>`;
+                xml += `</roblox>`;
+
+                const blob = new Blob([xml], {type: "text/xml"});
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "asset.rbxm";
+                a.click();
+            };
+            const reader = new FileReader();
+            reader.onload = (e) => img.src = e.target.result;
+            reader.readAsDataURL(inp.files[0]);
+        }
+    </script>
+</body>
+</html>
