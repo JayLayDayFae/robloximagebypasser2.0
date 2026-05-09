@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Roblox Decal Bypass</title>
+    <title>BypassrV4</title>
     <style>
         body { font-family: serif; margin: 10px; }
         .preview-card { border: 1px solid black; margin-bottom: 20px; padding: 5px; display: inline-block; vertical-align: top; }
@@ -11,7 +11,7 @@
 </head>
 <body>
 
-    <h1>Roblox Decal Bypass</h1>
+    <h1>BypassrV4</h1>
 
     <div>
         Files: <input type="file" id="imageInput" multiple accept="image/*">
@@ -61,7 +61,7 @@
                             Name: <input type="text" id="name_${id}" value="${cleanName}"><br>
                             Size: <span id="sLabel_${id}">12</span> Studs <input type="range" id="scale_${id}" min="1" max="100" value="12" oninput="document.getElementById('sLabel_${id}').innerText=this.value"><br>
                             Res: <span id="rLabel_${id}">150</span>px <input type="range" id="res_${id}" min="1" max="300" value="150" oninput="document.getElementById('rLabel_${id}').innerText=this.value"><br>
-                            <input type="checkbox" id="part_${id}" checked> Add Part
+                            <input type="checkbox" id="double_${id}"> Double Sided
                         `;
                         previewContainer.appendChild(card);
                     };
@@ -77,35 +77,82 @@
             imageBatch.forEach(item => {
                 const finalName = document.getElementById(`name_${item.id}`).value;
                 const procRes = parseInt(document.getElementById(`res_${item.id}`).value);
-                const gameScale = document.getElementById(`scale_${item.id}`).value;
-                const addPart = document.getElementById(`part_${item.id}`).checked;
+                const gameScale = parseFloat(document.getElementById(`scale_${item.id}`).value);
 
                 const ratio = item.img.height / item.img.width;
                 canvas.width = procRes;
-                canvas.height = procRes * ratio;
+                canvas.height = Math.floor(procRes * ratio);
 
                 ctx.clearRect(0,0,canvas.width, canvas.height);
                 ctx.drawImage(item.img, 0, 0, canvas.width, canvas.height);
                 const imgData = ctx.getImageData(0,0, canvas.width, canvas.height).data;
                 
-                let lua = `local Data = {\n  Name = "${finalName}",\n  Scale = ${gameScale},\n  AddPart = ${addPart},\n  Pixels = {\n`;
+                let frames = "";
+                let count = 0;
+
                 for (let y = 0; y < canvas.height; y++) {
                     for (let x = 0; x < canvas.width; x++) {
                         const i = (y * canvas.width + x) * 4;
-                        // Only include pixels that aren't fully transparent
-                        if (imgData[i+3] > 0) {
-                            lua += `    {Vector2.new(${x},${y}), Color3.fromRGB(${imgData[i]},${imgData[i+1]},${imgData[i+2]})},\n`;
+                        if (imgData[i+3] > 127) { // Only pixels with alpha
+                            const r = imgData[i] / 255;
+                            const g = imgData[i+1] / 255;
+                            const b = imgData[i+2] / 255;
+
+                            frames += `
+            <Item class="Frame" referent="PX${count}">
+                <Properties>
+                    <string name="Name">P</string>
+                    <Color3 name="BackgroundColor3">
+                        <R>${r}</R><G>${g}</G><B>${b}</B>
+                    </Color3>
+                    <UDim2 name="Position">
+                        <XS>0</XS><XO>${x}</XO>
+                        <YS>0</YS><YO>${y}</YO>
+                    </UDim2>
+                    <UDim2 name="Size">
+                        <XS>0</XS><XO>1</XO>
+                        <YS>0</YS><YO>1</YO>
+                    </UDim2>
+                    <float name="BackgroundTransparency">0</float>
+                    <int name="BorderSizePixel">0</int>
+                </Properties>
+            </Item>`;
+                            count++;
                         }
                     }
                 }
-                lua += "  }\n}\nreturn Data";
+
+                // Final RBXM Structure: Part -> SurfaceGui -> Frames
+                const rbxm = `<roblox version="4">
+    <Item class="Part" referent="MAIN_PART">
+        <Properties>
+            <string name="Name">${finalName}</string>
+            <Vector3 name="size">
+                <X>${gameScale}</X>
+                <Y>${gameScale * ratio}</Y>
+                <Z>0.2</Z>
+            </Vector3>
+            <bool name="Anchored">true</bool>
+        </Properties>
+        <Item class="SurfaceGui" referent="SGUI">
+            <Properties>
+                <string name="Name">MakerGui</string>
+                <Vector2 name="CanvasSize">
+                    <X>${canvas.width}</X>
+                    <Y>${canvas.height}</Y>
+                </Vector2>
+            </Properties>
+            ${frames}
+        </Item>
+    </Item>
+</roblox>`;
 
                 const pill = document.createElement('div');
                 pill.className = 'output-item';
                 pill.innerHTML = `
                     <img src="${item.img.src}" height="30">
-                    <span>${finalName}.lua</span>
-                    <button onclick="const a=document.createElement('a');a.href='data:text/plain;charset=utf-8,${encodeURIComponent(lua)}';a.download='${finalName}.lua';a.click();">Download</button>
+                    <span>${finalName}.rbxm</span>
+                    <button onclick="const a=document.createElement('a');a.href='data:text/xml;charset=utf-8,${encodeURIComponent(rbxm)}';a.download='${finalName}.rbxm';a.click();">Download RBXM</button>
                 `;
                 outputContainer.appendChild(pill);
             });
